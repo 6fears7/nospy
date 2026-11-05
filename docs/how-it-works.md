@@ -6,7 +6,7 @@ These rules apply in every mode.
 
 - **Placeholders** look like `[REDACTED_<KIND>_<n>]`. The same value always gets the same placeholder to support prompt caching.
 - **Kinds:** `PRIVATE_KEY`, `TOKEN`, `PASSWORD`, `SECRET`, `EMAIL`, `IPV4`, `IPV6`, `DOMAIN`, `USER`, `ADDRESS`, `TERM`, plus any you add with [custom terms](custom-terms.md).
-- **Discovery** (regex based): private keys, known token formats, bearer tokens, URL passwords, `password=`-style keywords, high-entropy strings, emails, IP addresses, domains (real TLD list), usernames in home directories, postal addresses, and secret files (k8s Secrets, kubeconfig, dotenv, Terraform state).
+- **Discovery** (regex based): private keys, known token formats, bearer tokens, URL passwords, `password=`-style keywords (any key whose last word names a secret, in `snake_case`, `kebab-case` or `camelCase`: `secret_key`, `sessionSecret`, `DB_PASS`; `max_tokens` and `secret_name` are left alone), high-entropy strings, emails, IP addresses, domains (real TLD list), usernames in home directories, postal addresses, and secret files (k8s Secrets, kubeconfig, dotenv, Terraform state).
 - **Ignored:** thinking blocks, signatures, base64 data.
 - **Restoration:** each request gets its own in-memory map of placeholder to value. This works for JSON and for SSE streams. If a stream splits a placeholder across two chunks, `nospy` rebuilds it before restoring.
 - **System prompt note:** when something was redacted, `nospy` adds a short fixed note to the system prompt.

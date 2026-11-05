@@ -2,7 +2,7 @@ package redact
 
 import "unicode/utf8"
 
-// minLiteralLen is the shortest value matched literally: keywordRe's minimum value length.
+// minLiteralLen is the shortest value matched literally: keywordValueRe's minimum value length.
 // Shorter values are still redacted where a rule finds them, but searching for them as text
 // would hit ordinary words.
 const minLiteralLen = 4

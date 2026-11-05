@@ -213,3 +213,62 @@ func TestSecretField(t *testing.T) {
 		}
 	}
 }
+
+func TestSecretKey(t *testing.T) {
+	for _, tc := range []struct {
+		key            string
+		arg, text, env bool
+	}{
+		// secret in every scope
+		{"secret_key", true, true, true}, {"sessionSecret", true, true, true}, {"secretKey", true, true, true},
+		{"APIKey", true, true, true}, {"jwt-secret", true, true, true}, {"dbpassword", true, true, true},
+		{"client.secret", true, true, true}, {"MY_API_KEY", true, true, true}, {"passphrase", true, true, true},
+		// only in text and dotenv
+		{"auth", false, true, true}, {"pwd", false, true, true}, {"DB_PWD", false, true, true},
+		// only in dotenv (any *_KEY has always counted there)
+		{"DB_PASS", false, false, true}, {"SECRET_KEY_BASE", false, false, false}, {"DSN", false, false, true}, {"key", false, false, true},
+		// not secrets
+		{"max_tokens", false, false, false}, {"token_count", false, false, false}, {"secret_name", false, false, false},
+		{"secretKeyRef", false, false, false}, {"private_key_id", false, false, false}, {"password_hint", false, false, false},
+		{"author", false, false, false}, {"monkey", false, false, false}, {"sort_key", false, false, true},
+		{"primary_key", false, false, true}, {"keyboard", false, false, false}, {"", false, false, false},
+	} {
+		for scope, want := range map[keyScope]bool{scopeArg: tc.arg, scopeText: tc.text, scopeEnv: tc.env} {
+			if got := secretKey(tc.key, scope); got != want {
+				t.Errorf("secretKey(%q, scope %d) = %v, want %v", tc.key, scope, got, want)
+			}
+		}
+	}
+}
+
+// Free text, YAML and JSON with a secret key are redacted whatever the key's spelling; names
+// that only contain a secret word are left alone.
+func TestKeywordKeyShapes(t *testing.T) {
+	for _, tc := range []struct {
+		in, secret string // secret "" means nothing may be redacted
+	}{
+		{"secret_key: Zm9vYmFyYmF6", "Zm9vYmFyYmF6"},
+		{`{"secretKey":"qwerty123456789"}`, "qwerty123456789"},
+		{`{"sessionSecret": "xyz98765xyz"}`, "xyz98765xyz"},
+		{"jwt_secret = \"hunter2hunter2\"", "hunter2hunter2"},
+		{"https: token=abcd1234efgh", "abcd1234efgh"},
+		{"max_tokens: 4096", ""},
+		{"token_count: 12345", ""},
+		{"secret_name: my-app-secret", ""},
+		{"secretKeyRef: dbcreds", ""},
+		{"private_key_id: abcd1234efgh5678", ""},
+		{"author: someonelongname", ""},
+	} {
+		ms := testDetector.Detect(tc.in)
+		if tc.secret == "" {
+			if len(ms) > 0 {
+				t.Errorf("%q: want no matches, got %s", tc.in, describe(tc.in, ms))
+			}
+			continue
+		}
+		at := strings.Index(tc.in, tc.secret)
+		if !covered(ms, at, at+len(tc.secret)) {
+			t.Errorf("%q: %q not redacted, got %s", tc.in, tc.secret, describe(tc.in, ms))
+		}
+	}
+}

@@ -27,13 +27,16 @@ var (
 	}
 	bearerRe      = regexp.MustCompile(`(?i)\bbearer\s+([A-Za-z0-9._~+/-]{16,}=*)`)
 	urlPasswordRe = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://[^\s/:@]+:([^\s/@]+)@`)
-	keywordRe     = regexp.MustCompile(`(?i)(?:\b|_)(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret|auth)\b["']?\s*[:=]\s*["']?([^\s"',;]{4,})`)
-	varRefRe      = regexp.MustCompile(`^(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Z_][A-Z0-9_]*)$`)
-	entropyRe     = regexp.MustCompile(`[A-Za-z0-9+/=_-]{32,}`)
-	emailRe       = regexp.MustCompile(`(?i)[a-z0-9._%+-]+@((?:[a-z0-9-]+\.)+([a-z]{2,63}))\b`)
-	ipv4Re        = regexp.MustCompile(`\b\d{1,3}(?:\.\d{1,3}){3}\b`)
-	ipv6Re        = regexp.MustCompile(`(?i)(?:[0-9a-f]{0,4}:){2,7}[0-9a-f.]*`)
-	domainRe      = regexp.MustCompile(`(?i)\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\b`)
+	// keyRe finds any "key:" or "key=" and keywordValueRe the value after it. They are separate so a
+	// non-secret key like https: doesn't swallow a token=... that follows it. secretKey judges the key.
+	keyRe          = regexp.MustCompile(`([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*[:=]`)
+	keywordValueRe = regexp.MustCompile(`^\s*["']?([^\s"',;]{4,})`)
+	varRefRe       = regexp.MustCompile(`^(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Z_][A-Z0-9_]*)$`)
+	entropyRe      = regexp.MustCompile(`[A-Za-z0-9+/=_-]{32,}`)
+	emailRe        = regexp.MustCompile(`(?i)[a-z0-9._%+-]+@((?:[a-z0-9-]+\.)+([a-z]{2,63}))\b`)
+	ipv4Re         = regexp.MustCompile(`\b\d{1,3}(?:\.\d{1,3}){3}\b`)
+	ipv6Re         = regexp.MustCompile(`(?i)(?:[0-9a-f]{0,4}:){2,7}[0-9a-f.]*`)
+	domainRe       = regexp.MustCompile(`(?i)\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\b`)
 )
 
 var allowIPs = map[string]bool{"127.0.0.1": true, "0.0.0.0": true, "::1": true}
@@ -55,11 +58,19 @@ func detectPatterns(s string, d *Detector, add addFunc) {
 	for _, l := range urlPasswordRe.FindAllStringSubmatchIndex(s, -1) {
 		add(l[2], l[3], KindPassword, prioURLPassword, "url-password")
 	}
-	for _, l := range keywordRe.FindAllStringSubmatchIndex(s, -1) {
-		if varRefRe.MatchString(s[l[2]:l[3]]) {
+	for _, l := range keyRe.FindAllStringSubmatchIndex(s, -1) {
+		if !secretKey(s[l[2]:l[3]], scopeText) {
+			continue
+		}
+		v := keywordValueRe.FindStringSubmatchIndex(s[l[1]:])
+		if v == nil {
+			continue
+		}
+		vs, ve := l[1]+v[2], l[1]+v[3]
+		if varRefRe.MatchString(s[vs:ve]) {
 			continue // ${DB_PASSWORD} or $TOKEN: a reference to a secret, not one (dotenv skips all `$` values)
 		}
-		add(l[2], l[3], KindPassword, prioKeyword, "keyword")
+		add(vs, ve, KindPassword, prioKeyword, "keyword")
 	}
 	for _, l := range entropyRe.FindAllStringIndex(s, -1) {
 		if highEntropy(s[l[0]:l[1]]) {

@@ -36,11 +36,7 @@ var (
 )
 
 var (
-	dotenvSuffixes = []string{"KEY", "SECRET", "TOKEN", "PASSWORD", "PASSWD", "PWD", "CREDENTIAL", "CREDENTIALS", "AUTH", "DSN", "CONNECTION_STRING"}
-	// fieldSecretSuffixes are normalized (lowercase, no _ - .) suffixes of JSON tool-argument keys.
-	// Narrower than dotenv's: no key, auth or pwd, which are ordinary arguments there.
-	fieldSecretSuffixes = []string{"password", "passwd", "secret", "token", "apikey", "accesskey", "secretkey", "privatekey", "credential", "credentials", "connectionstring"}
-	tfSecretKeys        = []string{
+	tfSecretKeys = []string{
 		"password", "secret", "secret_key", "access_key", "secret_access_key", "private_key",
 		"private_key_pem", "private_key_openssh", "token", "client_secret", "connection_string",
 		"credentials", "primary_key", "secondary_key", "secret_string", "secret_binary",
@@ -221,7 +217,7 @@ func tfstate(s string, secret func(int, int)) {
 
 func dotenv(s string, secret func(int, int)) {
 	for _, l := range dotenvLineRe.FindAllStringSubmatchIndex(s, -1) {
-		if !dotenvSecretKey(s[l[2]:l[3]]) {
+		if !secretKey(s[l[2]:l[3]], scopeEnv) {
 			continue
 		}
 		vs, ve := unquote(s, l[4], l[5])
@@ -238,34 +234,9 @@ func skipSecretValue(v string) bool {
 	return v == "" || v[0] == '$' || v[0] == '=' || dotenvSkipValRe.MatchString(v)
 }
 
-// fieldSecretKey reports whether a JSON argument key ends with a secret suffix, ignoring case
-// and _ - . separators: apiKey, client_secret and DB_PASSWORD match; key, auth and author don't.
-func fieldSecretKey(key string) bool {
-	k := strings.ToLower(strings.NewReplacer("_", "", "-", "", ".", "").Replace(key))
-	for _, suf := range fieldSecretSuffixes {
-		if strings.HasSuffix(k, suf) {
-			return true
-		}
-	}
-	return false
-}
-
-// dotenvSecretKey reports whether key is, or ends with a separator plus, a secret suffix.
-// The separator requirement keeps MONKEY and AUTHOR out.
-func dotenvSecretKey(key string) bool {
-	k := strings.ToUpper(key)
-	for _, suf := range dotenvSuffixes {
-		if k == suf {
-			return true
-		}
-		for _, sep := range "_-." {
-			if strings.HasSuffix(k, string(sep)+suf) {
-				return true
-			}
-		}
-	}
-	return false
-}
+// fieldSecretKey reports whether a JSON tool-argument key names a secret: apiKey, client_secret and
+// DB_PASSWORD do; key, auth and author don't (see keys.go).
+func fieldSecretKey(key string) bool { return secretKey(key, scopeArg) }
 
 // splitLines returns [start,end) of each line in s[pos:end], without the newline.
 func splitLines(s string, pos, end int) [][2]int {
