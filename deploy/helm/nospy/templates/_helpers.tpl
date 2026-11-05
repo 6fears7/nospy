@@ -5,7 +5,7 @@ an app chart includes them with its own context.
 */}}
 
 {{/* Generated from the root VERSION file (deploy/helm/sync-version.sh). */}}
-{{- define "nospy.appVersion" -}}0.2.0{{- end -}}
+{{- define "nospy.appVersion" -}}0.3.0{{- end -}}
 
 {{- define "nospy.image" -}}
 {{ .Values.image.repository }}:{{ .Values.image.tag | default (include "nospy.appVersion" .) }}
